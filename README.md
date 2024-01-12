@@ -8,9 +8,14 @@
 
     python parser.py -f /path/to/archive/folder
 
-It will generate 'parser-output' folder inside '/path/to/archive/folder' folder.  There will be 2 result files inside 'parser-output' folder:
+It will generate 'parser-output' folder inside '/path/to/archive/folder' folder.  
+
+There will be 2 result files inside 'parser-output' folder:
+
 result.html
+
 result.pdf     
+
 
 File result.html will use files from parser-output/media folder. 
 So don't rename this folder.
