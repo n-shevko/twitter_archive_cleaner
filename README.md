@@ -11,9 +11,7 @@
 It will generate 'parser-output' folder inside '/path/to/archive/folder' folder.  
 
 There will be 2 result files inside 'parser-output' folder:
-
 result.html
-
 result.pdf     
 
 
