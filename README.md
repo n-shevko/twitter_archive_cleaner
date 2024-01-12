@@ -22,7 +22,8 @@ So don't rename this folder.
 
 ## Other options for parser.py
 
---pdf           Generate pdf version. Turned on by default.  --download      Download the original size images (may take 1-2 hours). Turned off by default.
+--pdf           Generate pdf version. Turned on by default.  
+--download      Download the original size images (may take 1-2 hours). Turned off by default.
 
 Based on https://github.com/timhutton/twitter-archive-parser
 
