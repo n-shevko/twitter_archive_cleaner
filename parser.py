@@ -1341,6 +1341,10 @@ def main(archive_path, download_larger_media_flag):
     paths = PathConfig(dir_archive=archive_path)
     current_file_path = os.path.dirname(os.path.abspath(__file__))
     css = os.path.join(current_file_path, 'pico.min.css')
+
+    # Make a folder to copy the images and videos into.
+    os.makedirs(paths.dir_output_media, exist_ok=True)
+
     shutil.copy(css, paths.dir_output_media)
 
     # Extract the archive owner's username from data/account.js
@@ -1373,8 +1377,6 @@ def main(archive_path, download_larger_media_flag):
 
     migrate_old_output(paths)
 
-    # Make a folder to copy the images and videos into.
-    os.makedirs(paths.dir_output_media, exist_ok=True)
     # if not os.path.isfile(paths.file_tweet_icon):
     #     shutil.copy('assets/images/favicon.ico', paths.file_tweet_icon)
 
