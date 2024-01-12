@@ -614,7 +614,7 @@ def parse_tweets(username, users, html_template, paths: PathConfig):
             dates.append(datetime.datetime.strptime(tweet2['created_at'], '%a %b %d %X %z %Y'))
             tweets.append(convert_tweet(tweet, username, media_sources, users, paths))
     tweets.sort(key=lambda tup: tup[0], reverse=True) # newest first
-    tweets = tweets[0:10]
+    #tweets = tweets[0:10]
 
     flat_tweets = []
     pdf_tweets = []
