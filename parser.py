@@ -35,6 +35,12 @@ import time
 #  imagesize
 #  requests
 
+from tkinter import *
+from tkinter import ttk
+from tkinter import filedialog
+from tkinter import messagebox
+import threading
+
 
 # Print a compile-time error in Python < 3.6. This line does nothing in Python 3.6+ but is reported to the user
 # as an error (because it is the first line that fails to compile) in older versions.
@@ -1443,40 +1449,82 @@ def main(archive_path, download_larger_media_flag):
               'do not forget to protect it again.')
 
 
-if __name__ == "__main__":
-    import argparse
+root = Tk()
+root.title("Twitter archive cleaner")
+frm = ttk.Frame(root, padding=10)
+frm.grid(column=0, row=0)
+ttk.Label(frm, text="Archive isn't selected ").grid(column=0, row=0)
 
-    parser = argparse.ArgumentParser(description='Twitter archive to html and pdf files')
 
-    parser.add_argument(
-        '-f',
-        '--folder',
-        type=str,
-        help='Path to archive folder',
-        required=True
-    )
-    parser.add_argument(
-        '--download',
-        action='store_true',
-        default=False,
-        help='Download the original size images (may take 1-2 hours). Turned off by default.'
-    )
-    parser.add_argument(
-        '--pdf',
-        action='store_true',
-        default=True,
-        help='Generate pdf version. Turned on by default.'
-    )
+select_label = "Select"
+selected_folder = StringVar()
 
-    args = parser.parse_args()
-    main(args.folder, args.download)
 
-    if args.pdf:
-        out_folder = os.path.join(args.folder, 'parser-output')
-        result = os.path.join(out_folder, 'twits_pdf.html')
+def open_folder_dialog():
+    folder = filedialog.askdirectory(title=select_label)
+    if folder:
+        selected_folder.set(folder)
+        ttk.Label(frm, text=f"Selected archive: {folder}").grid(column=0, row=0)
+
+
+ttk.Button(frm, text=select_label, command=open_folder_dialog).grid(column=0, row=1)
+
+
+download = BooleanVar()
+Checkbutton(
+    frm,
+    text="Download the original size images (may take 1-2 hours)",
+    variable=download
+).grid(column=0, row=2, sticky="w")
+
+pdf = BooleanVar()
+pdf.set(True)
+Checkbutton(
+    frm,
+    text="Generate pdf version",
+    variable=pdf
+).grid(column=0, row=3, sticky="w")
+
+ttk.Label(frm, text="Jpeg quality in pdf. Int between 0 (worst) - 100 (best)").grid(
+    column=0, row=4, sticky="w"
+)
+jpeg_quality = Entry(frm, width=3)
+jpeg_quality.grid(column=0, row=4, sticky="e")
+jpeg_quality.insert(0, "75")
+
+progressbar = ttk.Progressbar(mode="indeterminate")
+
+
+def main2(selected_folder, download, pdf, progressbar):
+    main(selected_folder, download)
+    out_folder = os.path.join(selected_folder, 'parser-output')
+    result = os.path.join(out_folder, 'twits_pdf.html')
+    if pdf:
         from weasyprint import HTML
-
         HTML(filename=result).write_pdf(
-            os.path.join(out_folder, 'result.pdf')
+            os.path.join(out_folder, 'result.pdf'),
+            optimize_images=True,
+            jpeg_quality=int(jpeg_quality.get())
         )
     os.remove(result)
+    progressbar.stop()
+    progressbar.grid_remove()
+    ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=6)
+
+
+def run():
+    if not selected_folder.get():
+        messagebox.showinfo(
+            "Error",
+            "Select archive folder first"
+        )
+        return
+
+    progressbar.grid(column=0, row=6)
+    progressbar.start()
+    t = threading.Thread(target=main2, args=(selected_folder.get(), download.get(), pdf.get(), progressbar))
+    t.start()
+
+
+ttk.Button(frm, text='Run', command=run).grid(column=0, row=5)
+root.mainloop()

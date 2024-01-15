@@ -4,11 +4,18 @@
     cd twitter_archive_cleaner
     pip install -r packages
 
+    for mac os:
+    brew install python-tk 
+    
+    for ubuntu:
+    sudo apt-get install python3-tk 
+
 ## How to use
 
-    python parser.py -f /path/to/archive/folder
+    python parser.py
 
-It will generate 'parser-output' folder inside '/path/to/archive/folder' folder.  
+This command will open a tkinter UI. After pressing the "Run" button, 
+it will generate a 'parser-output' folder inside the archive folder. 
 
 There will be 2 result files inside 'parser-output' folder:
 
@@ -19,11 +26,6 @@ result.pdf
 
 File result.html will use files from parser-output/media folder. 
 So don't rename this folder.
-
-## Other options for parser.py
-
---pdf           Generate pdf version. Turned on by default.  
---download      Download the original size images (may take 1-2 hours). Turned off by default.
 
 Based on https://github.com/timhutton/twitter-archive-parser
 
