@@ -464,10 +464,10 @@ def download_file_if_larger(url, filename, index, count, sleep_time):
     pref = f'{index:3d}/{count:3d} {filename}: '
     # Sleep briefly, in an attempt to minimize the possibility of trigging some auto-cutoff mechanism
     if index > 1:
-        print(f'{pref}Sleeping...', end='\r')
+        logging.info(f'{pref}Sleeping...')
         time.sleep(sleep_time)
     # Request the URL (in stream mode so that we can conditionally abort depending on the headers)
-    print(f'{pref}Requesting headers for {url}...', end='\r')
+    logging.info(f'{pref}Requesting headers for {url}...')
     byte_size_before = os.path.getsize(filename)
     try:
         with requests.get(url, stream=True, timeout=2) as res:
@@ -481,7 +481,7 @@ def download_file_if_larger(url, filename, index, count, sleep_time):
             if byte_size_after != byte_size_before:
                 # Proceed with the full download
                 tmp_filename = filename+'.tmp'
-                print(f'{pref}Downloading {url}...            ', end='\r')
+                logging.info(f'{pref}Downloading {url}...            ')
                 with open(tmp_filename,'wb') as f:
                     shutil.copyfileobj(res.raw, f)
                 post = f'{byte_size_after/2**20:.1f}MB downloaded'
@@ -530,12 +530,6 @@ def download_larger_media(media_sources, paths: PathConfig):
        Aborts downloads if the remote file is the same size or smaller than the existing local version.
        Retries the failed downloads several times, with increasing pauses between each to avoid being blocked.
     """
-    # Log to file as well as the console
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
-    mkdirs_for_file(paths.file_download_log)
-    logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
-    logfile_handler.setLevel(logging.INFO)
-    logging.getLogger().addHandler(logfile_handler)
     # Download new versions
     start_time = time.time()
     total_bytes_downloaded = 0
@@ -576,9 +570,9 @@ def download_larger_media(media_sources, paths: PathConfig):
                     f"{estimated_time_remaining.second} second{'' if estimated_time_remaining.second == 1 else 's'}"
 
             if index + 1 == number_of_files:
-                print('    100 % done.')
+                logging.info('    100 % done.')
             else:
-                print(f'    {(100*(index+1)/number_of_files):.1f} % done, about {time_remaining_string} remaining...')
+                logging.info(f'    {(100*(index+1)/number_of_files):.1f} % done, about {time_remaining_string} remaining...')
 
         media_sources = retries
         remaining_tries -= 1
@@ -588,13 +582,13 @@ def download_larger_media(media_sources, paths: PathConfig):
         if len(retries) == 0:
             break
         if remaining_tries > 0:
-            print(f'----------------------\n\nRetrying the ones that failed, with a longer sleep. '
+            logging.info(f'----------------------\n\nRetrying the ones that failed, with a longer sleep. '
                   f'{remaining_tries} tries remaining.\n')
     end_time = time.time()
 
     logging.info(f'Total downloaded: {total_bytes_downloaded/2**20:.1f}MB = {total_bytes_downloaded/2**30:.2f}GB')
     logging.info(f'Time taken: {end_time-start_time:.0f}s')
-    print(f'Wrote log to {paths.file_download_log}')
+    logging.info(f'Wrote log to {paths.file_download_log}')
 
 
 def parse_tweets(username, users, html_template, paths: PathConfig):
@@ -1496,16 +1490,29 @@ progressbar = ttk.Progressbar(mode="indeterminate")
 
 
 def main2(selected_folder, download, pdf, progressbar):
+    # Log to file as well as the console
+    paths = PathConfig(dir_archive=selected_folder)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
+    mkdirs_for_file(paths.file_download_log)
+    logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
+    logfile_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(logfile_handler)
+
+    logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
+
     main(selected_folder, download)
+
     out_folder = os.path.join(selected_folder, 'parser-output')
     result = os.path.join(out_folder, 'twits_pdf.html')
     if pdf:
         from weasyprint import HTML
+        logging.info("Started generation of pdf with weasyprint")
         HTML(filename=result).write_pdf(
             os.path.join(out_folder, 'result.pdf'),
             optimize_images=True,
             jpeg_quality=int(jpeg_quality.get())
         )
+        logging.info("Finished generation of pdf with weasyprint")
     os.remove(result)
     progressbar.stop()
     progressbar.grid_remove()
