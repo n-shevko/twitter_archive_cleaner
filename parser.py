@@ -39,12 +39,34 @@ from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
+
+from functools import partial
+
+import tkinter as tk
 import threading
+import traceback
 
 
 # Print a compile-time error in Python < 3.6. This line does nothing in Python 3.6+ but is reported to the user
 # as an error (because it is the first line that fails to compile) in older versions.
 f' Error: This script requires Python 3.6 or later. Use `python --version` to check your version.'
+
+
+root = Tk()
+root.title("Twitter archive cleaner")
+frm = ttk.Frame(root, padding=10)
+frm.grid(column=0, row=0)
+
+
+def copy_message(text_to_copy):
+    root.clipboard_clear()
+    root.clipboard_append(text_to_copy)
+    root.update()
+
+
+def notify(message):
+    ttk.Label(frm, text=message).grid(column=0, row=6)
+    ttk.Button(frm, text='Copy message above', command=partial(copy_message, message)).grid(column=0, row=7)
 
 
 class UserData:
@@ -74,7 +96,7 @@ class PathConfig:
 
         # check if user is in correct folder
         if not os.path.isfile(self.file_account_js):
-            print(f'Error: Failed to load {self.file_account_js}. ')
+            notify(f'Error: Failed to load {self.file_account_js}. ')
             exit()
 
         self.dir_input_media                = find_dir_input_media(self.dir_input_data)
@@ -137,11 +159,8 @@ def import_module(module):
     try:
         return importlib.import_module(module)
     except ImportError:
-        print(f'\nError: This script uses the "{module}" module which is not installed.\n')
-        if not get_consent('OK to install using pip?'):
-            exit()
-        subprocess.run([sys.executable, '-m', 'pip', 'install', module], check=True)
-        return importlib.import_module(module)
+        notify(f'\nError: This script uses the "{module}" module which is not installed.\n')
+        exit()
 
 
 def open_and_mkdirs(path_file):
@@ -435,7 +454,7 @@ def find_files_input_tweets(dir_path_input_data):
     for input_tweets_file_template in input_tweets_file_templates:
         files_paths_input_tweets += glob.glob(os.path.join(dir_path_input_data, input_tweets_file_template))
     if len(files_paths_input_tweets)==0:
-        print(f'Error: no files matching {input_tweets_file_templates} in {dir_path_input_data}')
+        notify(f'Error: no files matching {input_tweets_file_templates} in {dir_path_input_data}')
         exit()
     return files_paths_input_tweets
 
@@ -446,10 +465,10 @@ def find_dir_input_media(dir_path_input_data):
     for input_media_dir_template in input_media_dir_templates:
         input_media_dirs += glob.glob(os.path.join(dir_path_input_data, input_media_dir_template))
     if len(input_media_dirs) == 0:
-        print(f'Error: no folders matching {input_media_dir_templates} in {dir_path_input_data}')
+        notify(f'Error: no folders matching {input_media_dir_templates} in {dir_path_input_data}')
         exit()
     if len(input_media_dirs) > 1:
-        print(f'Error: multiple folders matching {input_media_dir_templates} in {dir_path_input_data}')
+        notify(f'Error: multiple folders matching {input_media_dir_templates} in {dir_path_input_data}')
         exit()
     return input_media_dirs[0]
 
@@ -1310,33 +1329,6 @@ def is_archive(path):
     return os.path.isfile(os.path.join(path, 'data', 'account.js'))
 
 
-def find_archive():
-    """
-    Search for the archive
-    1. First try the working directory.
-    2. Then try the script directory.
-    3. Finally prompt the user.
-    """
-    if is_archive('.'):
-        return '.'
-    script_dir = os.path.dirname(__file__)
-    if script_dir != os.getcwd():
-        if is_archive(script_dir):
-            return script_dir
-    print('Archive not found in working directory or script directory.\n'
-          'Please enter the path of your Twitter archive, or just press Enter to exit.\n'
-          'On most operating systems, you can also try to drag and drop your archive folder '
-          'into the terminal window, and it will paste its path automatically.\n')
-    # Give the user as many attempts as they need.
-    while True:
-        input_path = input('Archive path: ')
-        if not input_path:
-            exit()
-        if is_archive(input_path):
-            return input_path
-        print(f'Archive not found at {input_path}')
-
-
 def main(archive_path, download_larger_media_flag):
     paths = PathConfig(dir_archive=archive_path)
     current_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -1443,10 +1435,7 @@ def main(archive_path, download_larger_media_flag):
               'do not forget to protect it again.')
 
 
-root = Tk()
-root.title("Twitter archive cleaner")
-frm = ttk.Frame(root, padding=10)
-frm.grid(column=0, row=0)
+
 ttk.Label(frm, text="Archive isn't selected ").grid(column=0, row=0)
 
 
@@ -1485,38 +1474,55 @@ ttk.Label(frm, text="Jpeg quality in pdf. Int between 0 (worst) - 100 (best)").g
 jpeg_quality = Entry(frm, width=3)
 jpeg_quality.grid(column=0, row=4, sticky="e")
 jpeg_quality.insert(0, "75")
-
+threads = {}
 progressbar = ttk.Progressbar(mode="indeterminate")
 
 
-def main2(selected_folder, download, pdf, progressbar):
-    # Log to file as well as the console
-    paths = PathConfig(dir_archive=selected_folder)
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
-    mkdirs_for_file(paths.file_download_log)
-    logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
-    logfile_handler.setLevel(logging.INFO)
-    logging.getLogger().addHandler(logfile_handler)
+def main2(selected_folder, download, pdf):
+    try:
+        paths = PathConfig(dir_archive=selected_folder)
+        logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
+        mkdirs_for_file(paths.file_download_log)
+        logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
+        logfile_handler.setLevel(logging.INFO)
+        logging.getLogger().addHandler(logfile_handler)
 
-    logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
+        logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
 
-    main(selected_folder, download)
+        main(selected_folder, download)
 
-    out_folder = os.path.join(selected_folder, 'parser-output')
-    result = os.path.join(out_folder, 'twits_pdf.html')
-    if pdf:
-        from weasyprint import HTML
-        logging.info("Started generation of pdf with weasyprint")
-        HTML(filename=result).write_pdf(
-            os.path.join(out_folder, 'result.pdf'),
-            optimize_images=True,
-            jpeg_quality=int(jpeg_quality.get())
-        )
-        logging.info("Finished generation of pdf with weasyprint")
-    os.remove(result)
+        out_folder = os.path.join(selected_folder, 'parser-output')
+        result = os.path.join(out_folder, 'twits_pdf.html')
+        if pdf:
+            from weasyprint import HTML
+            logging.info("Started generation of pdf with weasyprint")
+            HTML(filename=result).write_pdf(
+                os.path.join(out_folder, 'result.pdf'),
+                optimize_images=True,
+                jpeg_quality=int(jpeg_quality.get())
+            )
+            logging.info("Finished generation of pdf with weasyprint")
+        os.remove(result)
+        ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=6)
+    except Exception as e:
+        notify(str(e) + '\n' + traceback.format_exc())
+        exit()
+
+
+def enable_run_button_remove_progress():
     progressbar.stop()
     progressbar.grid_remove()
-    ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=6)
+    run_button.config(state=tk.NORMAL)
+
+
+def threads_watcher():
+    for id in list(threads.keys()):
+        thread = threads[id]
+        if not thread.is_alive():
+            enable_run_button_remove_progress()
+            del threads[id]
+
+    root.after(500, threads_watcher)
 
 
 def run():
@@ -1529,9 +1535,18 @@ def run():
 
     progressbar.grid(column=0, row=6)
     progressbar.start()
-    t = threading.Thread(target=main2, args=(selected_folder.get(), download.get(), pdf.get(), progressbar))
+    run_button.config(state=tk.DISABLED)
+
+    t = threading.Thread(
+        target=main2,
+        args=(selected_folder.get(), download.get(), pdf.get()),
+        daemon=True
+    )
     t.start()
+    threads[t.ident] = t
 
 
-ttk.Button(frm, text='Run', command=run).grid(column=0, row=5)
+run_button = ttk.Button(frm, text='Run', command=run)
+run_button.grid(column=0, row=5)
+threads_watcher()
 root.mainloop()
