@@ -544,7 +544,7 @@ def download_file_if_larger(url, filename, index, count, sleep_time):
         return False, 0
 
 
-def download_larger_media(media_sources, paths: PathConfig):
+def download_larger_media(media_sources, paths: PathConfig, progressbar):
     """Uses (filename, URL) tuples in media_sources to download files from remote storage.
        Aborts downloads if the remote file is the same size or smaller than the existing local version.
        Retries the failed downloads several times, with increasing pauses between each to avoid being blocked.
@@ -554,6 +554,7 @@ def download_larger_media(media_sources, paths: PathConfig):
     total_bytes_downloaded = 0
     sleep_time = 0.25
     remaining_tries = 5
+    init_progress = progressbar['value']
     while remaining_tries > 0:
         number_of_files = len(media_sources)
         success_count = 0
@@ -591,7 +592,9 @@ def download_larger_media(media_sources, paths: PathConfig):
             if index + 1 == number_of_files:
                 logging.info('    100 % done.')
             else:
-                logging.info(f'    {(100*(index+1)/number_of_files):.1f} % done, about {time_remaining_string} remaining...')
+                fraction = (index+1)/number_of_files
+                progressbar['value'] = init_progress + (100 - init_progress - 30) * fraction
+                logging.info(f'    {(100*fraction):.1f} % done, about {time_remaining_string} remaining...')
 
         media_sources = retries
         remaining_tries -= 1
@@ -1329,7 +1332,8 @@ def is_archive(path):
     return os.path.isfile(os.path.join(path, 'data', 'account.js'))
 
 
-def main(archive_path, download_larger_media_flag):
+def main(archive_path, download_larger_media_flag, progressbar):
+    progressbar.step(2.5)
     paths = PathConfig(dir_archive=archive_path)
     current_file_path = os.path.dirname(os.path.abspath(__file__))
     css = os.path.join(current_file_path, 'pico.min.css')
@@ -1373,7 +1377,7 @@ def main(archive_path, download_larger_media_flag):
     #     shutil.copy('assets/images/favicon.ico', paths.file_tweet_icon)
 
     media_sources = parse_tweets(username, users, html_template, paths)
-
+    progressbar.step(2.5)
     following_ids = collect_user_ids_from_followings(paths)
     print(f'found {len(following_ids)} user IDs in followings.')
     follower_ids = collect_user_ids_from_followers(paths)
@@ -1430,7 +1434,7 @@ def main(archive_path, download_larger_media_flag):
     print(f'before starting the download.\n')
 
     if download_larger_media_flag:
-        download_larger_media(media_sources, paths)
+        download_larger_media(media_sources, paths, progressbar)
         print('In case you set your account to public before initiating the download, '
               'do not forget to protect it again.')
 
@@ -1475,10 +1479,16 @@ jpeg_quality = Entry(frm, width=3)
 jpeg_quality.grid(column=0, row=4, sticky="e")
 jpeg_quality.insert(0, "75")
 threads = {}
-progressbar = ttk.Progressbar(mode="indeterminate")
+progressbar = ttk.Progressbar(length=400)
 
 
-def main2(selected_folder, download, pdf):
+def move_progressbar(progressbar):
+    while True:
+        progressbar.step(1/4)
+        time.sleep(1)
+
+
+def main2(selected_folder, download, pdf, progressbar):
     try:
         paths = PathConfig(dir_archive=selected_folder)
         logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
@@ -1489,13 +1499,19 @@ def main2(selected_folder, download, pdf):
 
         logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
 
-        main(selected_folder, download)
+        main(selected_folder, download, progressbar)
 
         out_folder = os.path.join(selected_folder, 'parser-output')
         result = os.path.join(out_folder, 'twits_pdf.html')
         if pdf:
             from weasyprint import HTML
             logging.info("Started generation of pdf with weasyprint")
+            t = threading.Thread(
+                target=move_progressbar,
+                args=(progressbar, ),
+                daemon=True
+            )
+            t.start()
             HTML(filename=result).write_pdf(
                 os.path.join(out_folder, 'result.pdf'),
                 optimize_images=True,
@@ -1534,12 +1550,11 @@ def run():
         return
 
     progressbar.grid(column=0, row=6)
-    progressbar.start()
     run_button.config(state=tk.DISABLED)
 
     t = threading.Thread(
         target=main2,
-        args=(selected_folder.get(), download.get(), pdf.get()),
+        args=(selected_folder.get(), download.get(), pdf.get(), progressbar),
         daemon=True
     )
     t.start()
