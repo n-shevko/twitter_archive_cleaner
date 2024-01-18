@@ -46,6 +46,8 @@ import tkinter as tk
 import threading
 import traceback
 
+from utils import HTML_TEMPLATE
+from old_format import main_old, is_old_format
 
 # Print a compile-time error in Python < 3.6. This line does nothing in Python 3.6+ but is reported to the user
 # as an error (because it is the first line that fails to compile) in older versions.
@@ -650,6 +652,7 @@ def parse_tweets(username, users, html_template, paths: PathConfig):
     start = min(dates).strftime('%b %Y')
     finish = max(dates).strftime('%b %Y')
     html_template = html_template.replace('{period}', f'{start} - {finish}')
+    html_template = html_template.replace('{pico_folder}', 'media')
 
     html_string = ''.join(flat_tweets)
     html_path = os.path.join(paths.dir_output, "result.html")
@@ -1340,104 +1343,16 @@ def main(archive_path, download_larger_media_flag, progressbar):
 
     # Make a folder to copy the images and videos into.
     os.makedirs(paths.dir_output_media, exist_ok=True)
-
     shutil.copy(css, paths.dir_output_media)
 
     # Extract the archive owner's username from data/account.js
     username = extract_username(paths)
-
-    user_id_url_template = 'https://twitter.com/i/user/{}'
-
-    html_template = """\
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="media/pico.min.css">
-     <style> 
-  *:not(pre):not(code):not(.font-monospace) {
-    font-family: Ubuntu, sans-serif!important;
-  }
-  </style>
-    <title>Twitter archive: {period}</title>
-</head>
-<body>
-    <main class="container">
-    {main}
-    </main>
-</body>
-</html>"""
-
     users = {}
-
     migrate_old_output(paths)
-
-    # if not os.path.isfile(paths.file_tweet_icon):
-    #     shutil.copy('assets/images/favicon.ico', paths.file_tweet_icon)
-
-    media_sources = parse_tweets(username, users, html_template, paths)
+    media_sources = parse_tweets(username, users, HTML_TEMPLATE, paths)
     progressbar.step(2.5)
-    following_ids = collect_user_ids_from_followings(paths)
-    print(f'found {len(following_ids)} user IDs in followings.')
-    follower_ids = collect_user_ids_from_followers(paths)
-    print(f'found {len(follower_ids)} user IDs in followers.')
-    dms_user_ids = collect_user_ids_from_direct_messages(paths)
-    print(f'found {len(dms_user_ids)} user IDs in direct messages.')
-    group_dms_user_ids = collect_user_ids_from_group_direct_messages(paths)
-    print(f'found {len(group_dms_user_ids)} user IDs in group direct messages.')
-
-    # bulk lookup for user handles from followers, followings, direct messages and group direct messages
-    collected_user_ids_without_followers = list(
-        set(following_ids).union(set(dms_user_ids)).union(set(group_dms_user_ids))
-    )
-    collected_user_ids_only_in_followers: set = set(follower_ids).difference(set(collected_user_ids_without_followers))
-    collected_user_ids: list = list(set(collected_user_ids_without_followers)
-                                    .union(collected_user_ids_only_in_followers))
-
-    print(f'\nfound {len(collected_user_ids)} user IDs overall.')
-
-    # give the user a choice if followers should be included in the lookup
-    # (but only in case they make up a large amount):
-    unknown_collected_user_ids: set = set(collected_user_ids).difference(users.keys())
-    unknown_follower_user_ids: set = unknown_collected_user_ids.intersection(collected_user_ids_only_in_followers)
-    # if len(unknown_follower_user_ids) > 5000:
-    #     # Account metadata observed at ~2.1KB on average.
-    #     estimated_follower_lookup_size = int(2.1 * len(unknown_follower_user_ids))
-    #     # we can look up at least 3000 users per minute.
-    #     estimated_max_follower_lookup_time_in_minutes = len(unknown_follower_user_ids) / 3000
-    #     print(
-    #         f'For some user IDs, the @handle is not included in the archive data. '
-    #         f'Unknown user handles can be looked up online.'
-    #         f'{len(unknown_follower_user_ids)} of {len(unknown_collected_user_ids)} total '
-    #         f'user IDs with unknown handles are from your followers. Online lookup would be '
-    #         f'about {estimated_follower_lookup_size:,} KB smaller and up to '
-    #         f'{estimated_max_follower_lookup_time_in_minutes:.1f} minutes faster without them.\n'
-    #     )
-    #
-    #     if not get_consent(f'Do you want to include handles of your followers '
-    #                        f'in the online lookup of user handles anyway?', default_to_yes=True):
-    #         collected_user_ids = collected_user_ids_without_followers
-
-#    lookup_users(collected_user_ids, users)
-
-    # parse_followings(users, user_id_url_template, paths)
-    # parse_followers(users, user_id_url_template, paths)
-    # parse_direct_messages(username, users, user_id_url_template, paths)
-    # parse_group_direct_messages(username, users, user_id_url_template, paths)
-
-    # Download larger images, if the user agrees
-    print(f"\nThe archive doesn't contain the original-size images. We can attempt to download them from twimg.com.")
-    print(f'Please be aware that this script may download a lot of data, which will cost you money if you are')
-    print(f'paying for bandwidth. Please be aware that the servers might block these requests if they are too')
-    print(f'frequent. This script may not work if your account is protected. You may want to set it to public')
-    print(f'before starting the download.\n')
-
     if download_larger_media_flag:
         download_larger_media(media_sources, paths, progressbar)
-        print('In case you set your account to public before initiating the download, '
-              'do not forget to protect it again.')
-
 
 
 ttk.Label(frm, text="Archive isn't selected ").grid(column=0, row=0)
@@ -1488,38 +1403,45 @@ def move_progressbar(progressbar):
         time.sleep(1)
 
 
+def generate_pdf(html_file, out_folder, progressbar):
+    if pdf:
+        from weasyprint import HTML
+        t = threading.Thread(
+            target=move_progressbar,
+            args=(progressbar,),
+            daemon=True
+        )
+        t.start()
+        HTML(filename=html_file).write_pdf(
+            os.path.join(out_folder, 'result.pdf'),
+            optimize_images=True,
+            jpeg_quality=int(jpeg_quality.get())
+        )
+    os.remove(html_file)
+    ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=6)
+
+
 def main2(selected_folder, download, pdf, progressbar):
     try:
-        paths = PathConfig(dir_archive=selected_folder)
-        logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
-        mkdirs_for_file(paths.file_download_log)
-        logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
-        logfile_handler.setLevel(logging.INFO)
-        logging.getLogger().addHandler(logfile_handler)
+        if os.path.exists(os.path.join(selected_folder, 'data', 'account.js')):
+            paths = PathConfig(dir_archive=selected_folder)
+            logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
+            mkdirs_for_file(paths.file_download_log)
+            logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
+            logfile_handler.setLevel(logging.INFO)
+            logging.getLogger().addHandler(logfile_handler)
+            logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
 
-        logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
+            main(selected_folder, download, progressbar)
 
-        main(selected_folder, download, progressbar)
-
-        out_folder = os.path.join(selected_folder, 'parser-output')
-        result = os.path.join(out_folder, 'twits_pdf.html')
-        if pdf:
-            from weasyprint import HTML
-            logging.info("Started generation of pdf with weasyprint")
-            t = threading.Thread(
-                target=move_progressbar,
-                args=(progressbar, ),
-                daemon=True
-            )
-            t.start()
-            HTML(filename=result).write_pdf(
-                os.path.join(out_folder, 'result.pdf'),
-                optimize_images=True,
-                jpeg_quality=int(jpeg_quality.get())
-            )
-            logging.info("Finished generation of pdf with weasyprint")
-        os.remove(result)
-        ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=6)
+            out_folder = os.path.join(selected_folder, 'parser-output')
+            result = os.path.join(out_folder, 'twits_pdf.html')
+            generate_pdf(result, out_folder, progressbar)
+        elif is_old_format(selected_folder):
+            html_for_pdf = main_old(selected_folder, progressbar)
+            generate_pdf(html_for_pdf, selected_folder, progressbar)
+        else:
+            notify("Selected folder doesn't look like twitter archive")
     except Exception as e:
         notify(str(e) + '\n' + traceback.format_exc())
         exit()
