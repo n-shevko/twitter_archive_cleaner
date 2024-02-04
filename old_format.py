@@ -4,6 +4,7 @@ import json
 import requests
 import shutil
 import datetime
+import yt_dlp
 
 from utils import HTML_TEMPLATE
 
@@ -32,37 +33,61 @@ def get_shorten2path_and_to_download(tweets, folder):
     for tweet in tweets:
         for item in tweet['entities']['media']:
             if item['url'] in tweet['text']:
-                shorten2full[item['url']] = item['media_url']
+                shorten2full[item['url']] = {
+                    'url': item['media_url'],
+                    'tweet': tweet
+                }
 
     to_download = []
     shorten2path = {}
     media_folder = os.path.join(folder, 'img')
-    for shorten, url in shorten2full.items():
-        file = url.split('/')[-1]
+    for shorten, item in shorten2full.items():
+        url = item['url']
+        if '/ext_tw_video_thumb/' in url:
+            file = os.path.splitext(url.split('/')[-1])[0] + '.mp4'
+        else:
+            file = url.split('/')[-1]
         path = os.path.join(media_folder, file)
         shorten2path[shorten] = path
         if os.path.exists(path):
             continue
-        to_download.append((url, path))
+
+        to_download.append((url, path, f"/{item['tweet']['user']['screen_name']}/status/{item['tweet']['id_str']}"))
     return shorten2path, to_download
 
 
 def download(to_download, progressbar):
     total = len(to_download)
     done = 0
-    for src, dst in to_download:
-        ext = src.split('.')[-1]
-        if ext in ['jpg', 'jpeg', 'png']:
-            url = src + ':orig'
+    for src, dst, url_path in to_download:
+        if '/ext_tw_video_thumb/' in src:
+            url = f'https://twitter.com{url_path}'
+            ydl_opts = {
+                'format': 'best',
+                'outtmpl': dst
+            }
+            attempts = 5
+            while attempts > 0:
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([url])
+                    break
+                except:
+                    print(f"Fail {attempts}: {url}")
+                    attempts -= 1
         else:
-            url = src
-        print(f"Start downloading: {url}")
-        with requests.get(url, stream=True, timeout=2) as res:
-            if res.status_code != 200:
-                continue
+            ext = src.split('.')[-1]
+            if ext in ['jpg', 'jpeg', 'png']:
+                url = src + ':orig'
+            else:
+                url = src
+            print(f"Start downloading: {url}")
+            with requests.get(url, stream=True, timeout=2) as res:
+                if res.status_code != 200:
+                    continue
 
-            with open(dst, 'wb') as f:
-                shutil.copyfileobj(res.raw, f)
+                with open(dst, 'wb') as f:
+                    shutil.copyfileobj(res.raw, f)
         done += 1
         percent = (done / total) * 100
         progressbar['value'] = percent * 0.8
@@ -82,7 +107,11 @@ def render(shorten2path, tweets, folder):
         for shorten, path in shorten2path.items():
             if shorten in body_html:
                 img_src = '/'.join(path.split('/')[-2:])
-                body_html = body_html.replace(shorten, f'<img src="{img_src}">')
+                if img_src.endswith('.mp4'):
+                    content = f'<video controls style="width: 100%"><source src="{img_src}"></video>'
+                else:
+                    content = f'<img src="{img_src}">'
+                body_html = body_html.replace(shorten, content)
 
         for item in tweet['entities']['urls']:
             expanded_url = f"<a href='{item['expanded_url']}'>{item['expanded_url']}</a>"
