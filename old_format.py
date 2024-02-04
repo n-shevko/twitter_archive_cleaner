@@ -33,26 +33,28 @@ def get_shorten2path_and_to_download(tweets, folder):
     for tweet in tweets:
         for item in tweet['entities']['media']:
             if item['url'] in tweet['text']:
-                shorten2full[item['url']] = {
-                    'url': item['media_url'],
-                    'tweet': tweet
-                }
-
+                shorten2full.setdefault(item['url'], []).append(
+                    {
+                        'url': item['media_url'],
+                        'tweet': tweet
+                    }
+                )
     to_download = []
     shorten2path = {}
     media_folder = os.path.join(folder, 'img')
-    for shorten, item in shorten2full.items():
-        url = item['url']
-        if '/ext_tw_video_thumb/' in url:
-            file = os.path.splitext(url.split('/')[-1])[0] + '.mp4'
-        else:
-            file = url.split('/')[-1]
-        path = os.path.join(media_folder, file)
-        shorten2path[shorten] = path
-        if os.path.exists(path):
-            continue
+    for shorten, items in shorten2full.items():
+        for item in items:
+            url = item['url']
+            if '/ext_tw_video_thumb/' in url:
+                file = os.path.splitext(url.split('/')[-1])[0] + '.mp4'
+            else:
+                file = url.split('/')[-1]
+            path = os.path.join(media_folder, file)
+            shorten2path.setdefault(shorten, []).append(path)
+            if os.path.exists(path):
+                continue
 
-        to_download.append((url, path, f"/{item['tweet']['user']['screen_name']}/status/{item['tweet']['id_str']}"))
+            to_download.append((url, path, f"/{item['tweet']['user']['screen_name']}/status/{item['tweet']['id_str']}"))
     return shorten2path, to_download
 
 
@@ -104,14 +106,17 @@ def render(shorten2path, tweets, folder):
     )
     for tweet in tweets:
         body_html = '<br>\n'.join(tweet['text'].splitlines())
-        for shorten, path in shorten2path.items():
+        for shorten, paths in shorten2path.items():
             if shorten in body_html:
-                img_src = '/'.join(path.split('/')[-2:])
-                if img_src.endswith('.mp4'):
-                    content = f'<video controls style="width: 100%"><source src="{img_src}"></video>'
-                else:
-                    content = f'<img src="{img_src}">'
-                body_html = body_html.replace(shorten, content)
+                images = []
+                for path in paths:
+                    img_src = '/'.join(path.split('/')[-2:])
+                    if img_src.endswith('.mp4'):
+                        content = f'<video controls style="width: 100%"><source src="{img_src}"></video>'
+                    else:
+                        content = f'<img src="{img_src}" style="margin-bottom: 5px">'
+                    images.append(content)
+                body_html = body_html.replace(shorten, '<br>\n'.join(images))
 
         for item in tweet['entities']['urls']:
             expanded_url = f"<a href='{item['expanded_url']}'>{item['expanded_url']}</a>"
