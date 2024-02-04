@@ -41,7 +41,8 @@ def get_shorten2path_and_to_download(tweets, folder):
                 )
     to_download = []
     shorten2path = {}
-    media_folder = os.path.join(folder, 'img')
+    media_folder = os.path.join(folder, 'media')
+    os.makedirs(media_folder, exist_ok=True)
     for shorten, items in shorten2full.items():
         for item in items:
             url = item['url']
@@ -141,14 +142,14 @@ def render(shorten2path, tweets, folder):
     start = min(datetimes).strftime('%b %Y')
     finish = max(datetimes).strftime('%b %Y')
     html_template = HTML_TEMPLATE.replace('{period}', f'{start} - {finish}')
-    html_template = html_template.replace('{pico_folder}', 'css')
+    html_template = html_template.replace('{pico_folder}', 'media')
 
     with open(os.path.join(folder, 'result.html'), 'w') as f:
         f.write(html_template.replace('{main}', ''.join(tweets2)))
 
     current_file_path = os.path.dirname(os.path.abspath(__file__))
     css = os.path.join(current_file_path, 'pico.min.css')
-    shutil.copy(css, os.path.join(folder, 'css'))
+    shutil.copy(css, os.path.join(folder, 'media'))
     return html_template.replace('{main}', ''.join(tweets_for_pdf))
 
 
