@@ -6,6 +6,7 @@
 
     for mac os:
     brew install python-tk 
+    brew install gobject-introspection 
     
     for ubuntu:
     sudo apt-get install python3-tk 
