@@ -96,7 +96,7 @@ def download(to_download, progressbar):
         progressbar['value'] = percent * 0.8
 
 
-def render(shorten2path, tweets, folder):
+def render(shorten2path, tweets, folder, avoid_page_brakes):
     tweets2 = []
     tweets_for_pdf = []
     datetimes = []
@@ -105,6 +105,11 @@ def render(shorten2path, tweets, folder):
         reverse=True,
         key=lambda t: datetime.datetime.strptime(t['created_at'], "%Y-%m-%d %H:%M:%S %z")
     )
+    if avoid_page_brakes:
+        breaks = 'page-break-inside: avoid;'
+    else:
+        breaks = ''
+
     for tweet in tweets:
         body_html = '<br>\n'.join(tweet['text'].splitlines())
         for shorten, paths in shorten2path.items():
@@ -132,7 +137,7 @@ def render(shorten2path, tweets, folder):
 
         body_html_pdf = body_html + f"<footer style='background-color: hsl(205, 20%, 94%); margin-top: 10px'>{formatted_date}&nbsp<a href='{original_tweet_url}' target='_blank'>original</a></footer>"
         tweets_for_pdf.append(
-            f"<article style='border: 1px solid hsl(205, 20%, 94%); page-break-inside: avoid; padding: 10px; margin-top: 10px'>{body_html_pdf}</article>"
+            f"<article style='border: 1px solid hsl(205, 20%, 94%); {breaks} padding: 10px; margin-top: 10px'>{body_html_pdf}</article>"
         )
         body_html += f'<footer>{formatted_date}&nbsp<a href="{original_tweet_url}" target="_blank">original</a></footer>'
         tweets2.append(
@@ -153,11 +158,11 @@ def render(shorten2path, tweets, folder):
     return html_template.replace('{main}', ''.join(tweets_for_pdf))
 
 
-def main_old(folder, progressbar):
+def main_old(folder, progressbar, avoid_page_brakes):
     tweets = load_tweets(folder)
     shorten2path, to_download = get_shorten2path_and_to_download(tweets, folder)
     download(to_download, progressbar)
-    html_for_pdf = render(shorten2path, tweets, folder)
+    html_for_pdf = render(shorten2path, tweets, folder, avoid_page_brakes)
     path = os.path.join(folder, 'for_pdf.html')
     with open(path, 'w') as f:
         f.write(html_for_pdf)

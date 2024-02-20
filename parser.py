@@ -615,7 +615,7 @@ def download_larger_media(media_sources, paths: PathConfig, progressbar):
     logging.info(f'Wrote log to {paths.file_download_log}')
 
 
-def parse_tweets(username, users, html_template, paths: PathConfig):
+def parse_tweets(username, users, html_template, paths: PathConfig, avoid_page_brakes):
     """Read tweets from paths.files_input_tweets, write to *.md and *.html.
        Copy the media used to paths.dir_output_media.
        Collect user_id:user_handle mappings for later use, in 'users'.
@@ -640,6 +640,11 @@ def parse_tweets(username, users, html_template, paths: PathConfig):
     tweets.sort(key=lambda tup: tup[0], reverse=True) # newest first
     #tweets = tweets[0:10]
 
+    if avoid_page_brakes:
+        breaks = 'page-break-inside: avoid;'
+    else:
+        breaks = ''
+
     flat_tweets = []
     pdf_tweets = []
     for timestamp, md, html in tweets:
@@ -647,7 +652,7 @@ def parse_tweets(username, users, html_template, paths: PathConfig):
         flat_tweets.append(f"<article>{html}</article>")
 
         html = html.replace('<footer>', "<footer style='background-color: hsl(205, 20%, 94%); margin-top: 10px'>")
-        pdf_tweets.append(f"<article style='border: 1px solid hsl(205, 20%, 94%); page-break-inside: avoid; padding: 10px; margin-top: 10px'>{html}</article>")
+        pdf_tweets.append(f"<article style='border: 1px solid hsl(205, 20%, 94%); {breaks} padding: 10px; margin-top: 10px'>{html}</article>")
 
     start = min(dates).strftime('%b %Y')
     finish = max(dates).strftime('%b %Y')
@@ -1335,7 +1340,7 @@ def is_archive(path):
     return os.path.isfile(os.path.join(path, 'data', 'account.js'))
 
 
-def main(archive_path, download_larger_media_flag, progressbar):
+def main(archive_path, download_larger_media_flag, progressbar, avoid_page_brakes):
     progressbar.step(2.5)
     paths = PathConfig(dir_archive=archive_path)
     current_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -1349,7 +1354,7 @@ def main(archive_path, download_larger_media_flag, progressbar):
     username = extract_username(paths)
     users = {}
     migrate_old_output(paths)
-    media_sources = parse_tweets(username, users, HTML_TEMPLATE, paths)
+    media_sources = parse_tweets(username, users, HTML_TEMPLATE, paths, avoid_page_brakes)
     progressbar.step(2.5)
     if download_larger_media_flag:
         download_larger_media(media_sources, paths, progressbar)
@@ -1387,11 +1392,19 @@ Checkbutton(
     variable=pdf
 ).grid(column=0, row=3, sticky="w")
 
+avoid_page_brakes = BooleanVar()
+avoid_page_brakes.set(True)
+Checkbutton(
+    frm,
+    text="Avoid page breaks",
+    variable=avoid_page_brakes
+).grid(column=0, row=4, sticky="w")
+
 ttk.Label(frm, text="Jpeg quality in pdf. Int between 0 (worst) - 100 (best)").grid(
-    column=0, row=4, sticky="w"
+    column=0, row=5, sticky="w"
 )
 jpeg_quality = Entry(frm, width=3)
-jpeg_quality.grid(column=0, row=4, sticky="e")
+jpeg_quality.grid(column=0, row=5, sticky="e")
 jpeg_quality.insert(0, "75")
 threads = {}
 progressbar = ttk.Progressbar(length=400)
@@ -1421,7 +1434,7 @@ def generate_pdf(html_file, out_folder, progressbar):
     ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=6)
 
 
-def main2(selected_folder, download, pdf, progressbar):
+def main2(selected_folder, download, pdf, progressbar, avoid_page_brakes):
     try:
         if os.path.exists(os.path.join(selected_folder, 'data', 'account.js')):
             paths = PathConfig(dir_archive=selected_folder)
@@ -1432,13 +1445,13 @@ def main2(selected_folder, download, pdf, progressbar):
             logging.getLogger().addHandler(logfile_handler)
             logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
 
-            main(selected_folder, download, progressbar)
+            main(selected_folder, download, progressbar, avoid_page_brakes)
 
             out_folder = os.path.join(selected_folder, 'parser-output')
             result = os.path.join(out_folder, 'twits_pdf.html')
             generate_pdf(result, out_folder, progressbar)
         elif is_old_format(selected_folder):
-            html_for_pdf = main_old(selected_folder, progressbar)
+            html_for_pdf = main_old(selected_folder, progressbar, avoid_page_brakes)
             generate_pdf(html_for_pdf, selected_folder, progressbar)
         else:
             notify("Selected folder doesn't look like twitter archive")
@@ -1476,7 +1489,7 @@ def run():
 
     t = threading.Thread(
         target=main2,
-        args=(selected_folder.get(), download.get(), pdf.get(), progressbar),
+        args=(selected_folder.get(), download.get(), pdf.get(), progressbar, avoid_page_brakes.get()),
         daemon=True
     )
     t.start()
@@ -1484,6 +1497,6 @@ def run():
 
 
 run_button = ttk.Button(frm, text='Run', command=run)
-run_button.grid(column=0, row=5)
+run_button.grid(column=0, row=7)
 threads_watcher()
 root.mainloop()
