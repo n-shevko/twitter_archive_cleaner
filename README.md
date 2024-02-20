@@ -6,6 +6,9 @@
 
     for mac os:
     brew install python-tk 
+    brew install gobject-introspection 
+    brew install pango
+    brew install weasyprint
     
     for ubuntu:
     sudo apt-get install python3-tk 
