@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Direct Messages</title>
+    <link rel="stylesheet" href="media/bootstrap.min.css">
+    <script src="media/bootstrap.bundle.min.js"></script>
+    <script src="media/vue.global.prod.js"></script>
+    <script src="media/data.js"></script>
+</head>
+<body>
+<style>
+    .col-3::-webkit-scrollbar {
+        display: none;
+    }
+</style>
+<div id="app" class="m-3">
+    <div class="row">
+        <div class="col-3" style="max-height: 93vh; overflow-y: auto;">
+            <div class="list-group">
+                <a href="#"
+                   @click.prevent="switchConverstation(idx)"
+                   class="list-group-item list-group-item-action"
+                   :class="{ active: idx === activeConversation }"
+                   v-for="(conversation, idx) in messages">
+                    <p class="mb-1">{{conversation.name}}</p>
+                    <small class="text-body-secondary">
+                        {{ formatDt(conversation.last_message_time) }}
+                    </small>
+                </a>
+            </div>
+        </div>
+        <div class="col-9 ps-0 d-flex flex-column" style="max-height: 93vh">
+            <div class="mb-2">
+                <input type="text"
+                       class="form-control"
+                       placeholder="Search this conversation"
+                       v-model="search"
+                >
+            </div>
+            <div style="overflow-y: auto; flex-grow: 1;">
+                <div class="card mb-2"
+                     style="width: 90% !important"
+                     :style="message.am_i_author == '1' ? { 'margin-left': 'auto' } : {}"
+                     v-for="message in filteredMessages">
+                    <div class="card-body">
+                        <p class="card-text">{{message.text}}</p>
+                        <p class="card-text">
+                            <small class="text-body-secondary">{{formatDt(message.createdAt)}}</small>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="media/main.js"></script>
+</body>
+</html>

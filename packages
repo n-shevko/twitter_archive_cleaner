@@ -1,3 +1,5 @@
 imagesize==1.4.1
 weasyprint==60.2
 yt-dlp==2023.12.30
+pydyf==0.10.0
+requests==2.32.4

@@ -48,6 +48,7 @@ import traceback
 
 from utils import HTML_TEMPLATE
 from old_format import main_old, is_old_format
+import requests
 
 # Print a compile-time error in Python < 3.6. This line does nothing in Python 3.6+ but is reported to the user
 # as an error (because it is the first line that fails to compile) in older versions.
@@ -615,7 +616,7 @@ def download_larger_media(media_sources, paths: PathConfig, progressbar):
     logging.info(f'Wrote log to {paths.file_download_log}')
 
 
-def parse_tweets(username, users, html_template, paths: PathConfig, avoid_page_brakes):
+def parse_tweets(username, users, html_template, paths: PathConfig, avoid_page_brakes, create_html):
     """Read tweets from paths.files_input_tweets, write to *.md and *.html.
        Copy the media used to paths.dir_output_media.
        Collect user_id:user_handle mappings for later use, in 'users'.
@@ -659,10 +660,11 @@ def parse_tweets(username, users, html_template, paths: PathConfig, avoid_page_b
     html_template = html_template.replace('{period}', f'{start} - {finish}')
     html_template = html_template.replace('{pico_folder}', 'media')
 
-    html_string = ''.join(flat_tweets)
-    html_path = os.path.join(paths.dir_output, "result.html")
-    with open_and_mkdirs(html_path) as f:
-        f.write(html_template.replace('{main}', html_string))
+    if create_html:
+        html_string = ''.join(flat_tweets)
+        html_path = os.path.join(paths.dir_output, "result.html")
+        with open_and_mkdirs(html_path) as f:
+            f.write(html_template.replace('{main}', html_string))
 
     html_string = ''.join(pdf_tweets)
     html_path = os.path.join(paths.dir_output, "twits_pdf.html")
@@ -1340,7 +1342,7 @@ def is_archive(path):
     return os.path.isfile(os.path.join(path, 'data', 'account.js'))
 
 
-def main(archive_path, download_larger_media_flag, progressbar, avoid_page_brakes):
+def main(archive_path, download_larger_media_flag, progressbar, avoid_page_brakes, create_html):
     progressbar.step(2.5)
     paths = PathConfig(dir_archive=archive_path)
     current_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -1354,7 +1356,7 @@ def main(archive_path, download_larger_media_flag, progressbar, avoid_page_brake
     username = extract_username(paths)
     users = {}
     migrate_old_output(paths)
-    media_sources = parse_tweets(username, users, HTML_TEMPLATE, paths, avoid_page_brakes)
+    media_sources = parse_tweets(username, users, HTML_TEMPLATE, paths, avoid_page_brakes, create_html)
     progressbar.step(2.5)
     if download_larger_media_flag:
         download_larger_media(media_sources, paths, progressbar)
@@ -1377,34 +1379,50 @@ def open_folder_dialog():
 ttk.Button(frm, text=select_label, command=open_folder_dialog).grid(column=0, row=1)
 
 
+create_direct_messages = BooleanVar()
+Checkbutton(
+    frm,
+    text="Generate html file with direct messages",
+    variable=create_direct_messages
+).grid(column=0, row=2, sticky="w")
+
+
+html_file = BooleanVar()
+Checkbutton(
+    frm,
+    text="Generate html file with posts",
+    variable=html_file
+).grid(column=0, row=3, sticky="w")
+
+
 download = BooleanVar()
 Checkbutton(
     frm,
     text="Download the original size images (may take 1-2 hours)",
     variable=download
-).grid(column=0, row=2, sticky="w")
+).grid(column=0, row=4, sticky="w", padx=(20, 0))
 
 pdf = BooleanVar()
-pdf.set(True)
+pdf.set(False)
 Checkbutton(
     frm,
-    text="Generate pdf version",
+    text="Generate pdf file with posts",
     variable=pdf
-).grid(column=0, row=3, sticky="w")
+).grid(column=0, row=5, sticky="w")
 
 avoid_page_brakes = BooleanVar()
-avoid_page_brakes.set(True)
+avoid_page_brakes.set(False)
 Checkbutton(
     frm,
     text="Avoid page breaks",
     variable=avoid_page_brakes
-).grid(column=0, row=4, sticky="w")
+).grid(column=0, row=6, sticky="w", padx=(20, 0))
 
 ttk.Label(frm, text="Jpeg quality in pdf. Int between 0 (worst) - 100 (best)").grid(
-    column=0, row=5, sticky="w"
+    column=0, row=7, sticky="w", padx=(20, 0)
 )
 jpeg_quality = Entry(frm, width=3)
-jpeg_quality.grid(column=0, row=5, sticky="e")
+jpeg_quality.grid(column=0, row=7, sticky="e")
 jpeg_quality.insert(0, "75")
 threads = {}
 progressbar = ttk.Progressbar(length=400)
@@ -1431,28 +1449,122 @@ def generate_pdf(html_file, out_folder, progressbar):
             jpeg_quality=int(jpeg_quality.get())
         )
     os.remove(html_file)
-    ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=6)
 
 
-def main2(selected_folder, download, pdf, progressbar, avoid_page_brakes):
+def load_json(path):
+    with open(path, 'r') as f:
+        data = f.read()
+    data = data.split("\n")
+    data[0] = "[\n"
+    data = "\n".join(data)
+    return json.loads(data)
+
+
+def call_twitter_api(ids):
+    url = "https://api.twitterapi.io/twitter/user/batch_info_by_ids"
+    headers = {"X-API-Key": "f9d8bc5273404f88abdb73ed74788164"}
+    tmp = ",".join(ids)
+    try:
+        response = requests.request("GET", url + f"?userIds={tmp}", headers=headers)
+        return json.loads(response.text)["users"]
+    except Exception as e:
+        return []
+
+
+def as_datetime(s):
+    return datetime.datetime.fromisoformat(s.replace('Z', '+00:00'))
+
+
+def create_direct_messages_html(selected_folder, out_folder):
+    messages = load_json(os.path.join(selected_folder, 'data/direct-messages.js'))
+    account = load_json(os.path.join(selected_folder, 'data/account.js'))
+    account_id = account[0]['account']['accountId']
+    grouped = {}
+    for item in messages:
+        conversation = item['dmConversation']['messages']
+        for message in conversation:
+            message = message['messageCreate']
+            if message['senderId'] == account_id:
+                key = message['recipientId']
+            else:
+                key = message['senderId']
+            grouped.setdefault(key, []).append({
+                'createdAt': message['createdAt'],
+                'am_i_author': '1' if message['senderId'] == account_id else '0',
+                'text': message['text']
+            })
+
+    resposne = call_twitter_api(list(grouped.keys()))
+    users = {}
+    for item in resposne:
+        users[item['id']] = f"{item['name']} ({item['userName']})"
+
+    grouped2 = []
+    for key in grouped.keys():
+        tmp = sorted(
+            grouped[key],
+            key=lambda x: as_datetime(x['createdAt'])
+        )
+        grouped2.append(
+            {
+                'messages': tmp,
+                'last_message_time': tmp[-1]['createdAt'],
+                'name': users.get(key, key)
+            }
+        )
+    grouped2 = sorted(grouped2, key=lambda i: as_datetime(i['last_message_time']), reverse=True)
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    media_folder = os.path.join(out_folder, 'media')
+    os.makedirs(media_folder, exist_ok=True)
+    for file in glob.glob(os.path.join(current_file_path, 'direct_messages/media/*')):
+        shutil.copy(file, media_folder)
+
+    shutil.copy(
+        os.path.join(current_file_path, 'direct_messages/direct_messages.html'),
+        out_folder
+    )
+
+    development = False
+    if development:
+        data_path = os.path.join(current_file_path, 'direct_messages/media/data.js')
+    else:
+        data_path = os.path.join(out_folder, 'media/data.js')
+    with open(data_path, 'w') as f:
+        tmp = f"window.messages = {json.dumps(grouped2)}"
+        f.write(tmp)
+
+
+def main2(selected_folder, download, pdf, progressbar, avoid_page_brakes, create_html, create_direct_messages):
     try:
         if os.path.exists(os.path.join(selected_folder, 'data', 'account.js')):
-            paths = PathConfig(dir_archive=selected_folder)
-            logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
-            mkdirs_for_file(paths.file_download_log)
-            logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
-            logfile_handler.setLevel(logging.INFO)
-            logging.getLogger().addHandler(logfile_handler)
-            logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
-
-            main(selected_folder, download, progressbar, avoid_page_brakes)
+            if create_html or pdf:
+                paths = PathConfig(dir_archive=selected_folder)
+                logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(message)s')
+                mkdirs_for_file(paths.file_download_log)
+                logfile_handler = logging.FileHandler(filename=paths.file_download_log, mode='w')
+                logfile_handler.setLevel(logging.INFO)
+                logging.getLogger().addHandler(logfile_handler)
+                logging.info(f"Input params: folder: {selected_folder}, download: {download}, pdf: {pdf}")
+                main(selected_folder, download, progressbar, avoid_page_brakes, create_html)
 
             out_folder = os.path.join(selected_folder, 'parser-output')
             result = os.path.join(out_folder, 'twits_pdf.html')
-            generate_pdf(result, out_folder, progressbar)
+            if pdf:
+                generate_pdf(result, out_folder, progressbar)
+            else:
+                try:
+                    os.remove(result)
+                except:
+                    pass
+            if create_direct_messages:
+                create_direct_messages_html(selected_folder, out_folder)
+            ttk.Label(frm, text=f"Done. Result in folder {out_folder}").grid(column=0, row=9)
         elif is_old_format(selected_folder):
-            html_for_pdf = main_old(selected_folder, progressbar, avoid_page_brakes)
-            generate_pdf(html_for_pdf, selected_folder, progressbar)
+            if create_html or pdf:
+                html_for_pdf = main_old(selected_folder, progressbar, avoid_page_brakes)
+                if pdf:
+                    generate_pdf(html_for_pdf, selected_folder, progressbar)
+                ttk.Label(frm, text=f"Done. Result in folder {selected_folder}").grid(column=0, row=9)
         else:
             notify("Selected folder doesn't look like twitter archive")
     except Exception as e:
@@ -1489,7 +1601,15 @@ def run():
 
     t = threading.Thread(
         target=main2,
-        args=(selected_folder.get(), download.get(), pdf.get(), progressbar, avoid_page_brakes.get()),
+        args=(
+            selected_folder.get(),
+            download.get(),
+            pdf.get(),
+            progressbar,
+            avoid_page_brakes.get(),
+            html_file.get(),
+            create_direct_messages.get()
+        ),
         daemon=True
     )
     t.start()
@@ -1497,6 +1617,6 @@ def run():
 
 
 run_button = ttk.Button(frm, text='Run', command=run)
-run_button.grid(column=0, row=7)
+run_button.grid(column=0, row=8)
 threads_watcher()
 root.mainloop()
