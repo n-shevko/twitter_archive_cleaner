@@ -1483,6 +1483,9 @@ def create_direct_messages_html(selected_folder, out_folder):
     for item in messages:
         conversation = item['dmConversation']['messages']
         for message in conversation:
+            if 'messageCreate' not in message:
+                continue
+
             message = message['messageCreate']
             if message['senderId'] == account_id:
                 key = message['recipientId']
