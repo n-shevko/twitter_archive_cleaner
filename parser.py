@@ -1459,16 +1459,36 @@ def load_json(path):
     data = "\n".join(data)
     return json.loads(data)
 
+def each_slice(ls, size):
+    start = 0
+    finish = size
+    slice = ls[start:finish]
+    res = []
+    while slice:
+        res.append(slice)
+        start = finish
+        finish = start + size
+        slice = ls[start:finish]
+    return res
 
-def call_twitter_api(ids):
+
+def call_twitter_api(ids, out_folder):
     url = "https://api.twitterapi.io/twitter/user/batch_info_by_ids"
     headers = {"X-API-Key": "f9d8bc5273404f88abdb73ed74788164"}
-    tmp = ",".join(ids)
-    try:
-        response = requests.request("GET", url + f"?userIds={tmp}", headers=headers)
-        return json.loads(response.text)["users"]
-    except Exception as e:
-        return []
+    result = []
+    failed = []
+    for slice in each_slice(ids, 100):
+        tmp = ",".join(slice)
+        try:
+            response = requests.request("GET", url + f"?userIds={tmp}", headers=headers)
+            result += json.loads(response.text)["users"]
+        except Exception as e:
+            failed += slice
+
+    os.makedirs(out_folder, exist_ok=True)
+    with open(os.path.join(out_folder, 'user_ids_to_debug.txt'), 'w') as f:
+        f.write("\n".join(failed))
+    return result
 
 
 def as_datetime(s):
@@ -1497,7 +1517,7 @@ def create_direct_messages_html(selected_folder, out_folder):
                 'text': message['text']
             })
 
-    resposne = call_twitter_api(list(grouped.keys()))
+    resposne = call_twitter_api(list(grouped.keys()), out_folder)
     users = {}
     for item in resposne:
         users[item['id']] = f"{item['name']} ({item['userName']})"
