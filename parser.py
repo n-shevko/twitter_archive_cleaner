@@ -1487,7 +1487,7 @@ def call_twitter_api(ids, out_folder):
 
     os.makedirs(out_folder, exist_ok=True)
     with open(os.path.join(out_folder, 'user_ids_to_debug.txt'), 'w') as f:
-        f.write("\n".join(failed))
+        f.write("\n".join(ids))
     return result
 
 
@@ -1520,7 +1520,7 @@ def create_direct_messages_html(selected_folder, out_folder):
     resposne = call_twitter_api(list(grouped.keys()), out_folder)
     users = {}
     for item in resposne:
-        users[item['id']] = f"{item['name']} ({item['userName']})"
+        users[item['id']] = f"{item.get('name', 'name not found')} ({item.get('userName', 'userName no found')})"
 
     grouped2 = []
     for key in grouped.keys():
