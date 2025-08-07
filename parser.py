@@ -1485,9 +1485,9 @@ def call_twitter_api(ids, out_folder):
         except Exception as e:
             failed += slice
 
-    os.makedirs(out_folder, exist_ok=True)
-    with open(os.path.join(out_folder, 'user_ids_to_debug.txt'), 'w') as f:
-        f.write("\n".join(ids))
+    # os.makedirs(out_folder, exist_ok=True)
+    # with open(os.path.join(out_folder, 'user_ids_to_debug.txt'), 'w') as f:
+    #     f.write("\n".join(ids))
     return result
 
 
