@@ -1520,7 +1520,10 @@ def create_direct_messages_html(selected_folder, out_folder):
     resposne = call_twitter_api(list(grouped.keys()), out_folder)
     users = {}
     for item in resposne:
-        users[item['id']] = f"{item.get('name', 'name not found')} ({item.get('userName', 'userName no found')})"
+        if 'id' not in item or 'name' not in item:
+            continue
+
+        users[item['id']] = f"{item['name']} ({item['userName']})"
 
     grouped2 = []
     for key in grouped.keys():
